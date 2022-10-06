@@ -1,12 +1,19 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
+void main() async {
+  // main() 함수에서 async를 쓰려면 필요
+  WidgetsFlutterBinding.ensureInitialized();
+
+  //shared_preferences 인스턴스 생성
+  SharedPreferences prefs = await SharedPreferences.getInstance();
+
   runApp(
     MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (context) => CatService()),
+        ChangeNotifierProvider(create: (context) => CatService(prefs)),
       ],
       child: const MyApp(),
     ),
@@ -31,9 +38,14 @@ class CatService extends ChangeNotifier {
   List<String> catImages = [];
   // 좋아요 누른 사진
   List<String> favoriteImages = [];
+  // SharedPreferences 인스턴스
+  SharedPreferences prefs;
 
-  CatService() {
+  CatService(this.prefs) {
     getRandomCatImages();
+    // favorites로 저장된 favoriteImages를 가져옵니다.
+    // 저장된 값이 없는 경우 null을 반환하므로 이때는 빈 배열을 넣어줍니다.
+    favoriteImages = prefs.getStringList("favorites") ?? [];
   }
 
   // 랜덤 고양이 사진 API 호출
@@ -61,6 +73,10 @@ class CatService extends ChangeNotifier {
       // 좋아요 누르지않았다면 추가
       favoriteImages.add(catImage);
     }
+
+    // favoriteImages를 favorite라는 이름으로 저장하기
+    prefs.setStringList("favorites", favoriteImages);
+
     // Consumer 아래의 Builder부분이 다시 실행
     // 화면을 새로고침
     notifyListeners();
@@ -122,7 +138,9 @@ class HomePage extends StatelessWidget {
                         bottom: 8,
                         child: Icon(
                           Icons.favorite,
-                          color: Colors.amber,
+                          color: catService.favoriteImages.contains(catImage)
+                              ? Colors.amber
+                              : Colors.transparent,
                         ),
                       ),
                     ],
@@ -149,6 +167,46 @@ class FavoritePage extends StatelessWidget {
           appBar: AppBar(
             title: Text("좋아요"),
             backgroundColor: Colors.amber,
+          ),
+          body: GridView.count(
+            mainAxisSpacing: 8,
+            crossAxisSpacing: 8,
+            padding: EdgeInsets.all(8),
+            crossAxisCount: 2,
+            children: List.generate(
+              catService.favoriteImages.length,
+              (index) {
+                String catImage = catService.catImages[index];
+                return GestureDetector(
+                  // GestureDetector의 child 위젯을 클릭했을 경우
+                  // --> 익명함수 실행
+                  onTap: () {
+                    catService.toggleFavoriteImage(catImage);
+                  },
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: Image.network(
+                          catImage,
+                          // 보여주는 이미지를 동일한 크기로 꽉차게 설정
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      Positioned(
+                        right: 8,
+                        bottom: 8,
+                        child: Icon(
+                          Icons.favorite,
+                          color: catService.favoriteImages.contains(catImage)
+                              ? Colors.amber
+                              : Colors.transparent,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         );
       },
